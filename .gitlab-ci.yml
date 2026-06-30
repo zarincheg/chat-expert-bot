@@ -1,0 +1,131 @@
+stages:
+  - test
+  - build
+  - deploy
+
+variables:
+  NODE_VERSION: "20"
+  POSTGRES_USER: bot
+  POSTGRES_PASSWORD: bot
+  POSTGRES_DB: telegram_rag_bot
+  DATABASE_URL: postgresql://bot:bot@postgres:5432/telegram_rag_bot?schema=public
+  BOT_TOKEN: "000000000:TEST_TOKEN_FOR_CI_ONLY"
+  ADMIN_USER_IDS: "1"
+  BOT_INSTANCE_ID: default
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: ""
+
+.default-node:
+  image: node:20-alpine
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}
+    paths:
+      - node_modules/
+
+test:unit:
+  stage: test
+  extends: .default-node
+  services:
+    - name: postgres:16-alpine
+      alias: postgres
+  variables:
+    POSTGRES_USER: bot
+    POSTGRES_PASSWORD: bot
+    POSTGRES_DB: telegram_rag_bot
+  before_script:
+    - npm ci
+    - npx prisma generate
+    - npx prisma migrate deploy
+    - npm run db:seed
+  script:
+    - npm run test
+    - npm run build
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+test:docker:
+  stage: test
+  image: docker:27-cli
+  services:
+    - docker:27-dind
+  needs: [test:unit]
+  script:
+    - docker build -t $CI_REGISTRY_IMAGE:ci .
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+build:image:
+  stage: build
+  image: docker:27-cli
+  services:
+    - docker:27-dind
+  needs: [test:unit]
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - |
+      TAGS="-t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA"
+      if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then
+        TAGS="$TAGS -t $CI_REGISTRY_IMAGE:latest"
+      fi
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        TAGS="$TAGS -t $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG"
+      fi
+      docker build $TAGS .
+      docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+      if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then
+        docker push $CI_REGISTRY_IMAGE:latest
+      fi
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG
+      fi
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+deploy:production:
+  stage: deploy
+  image: alpine:3.20
+  needs: [build:image]
+  before_script:
+    - apk add --no-cache openssh-client
+    - eval "$(ssh-agent -s)"
+    - echo "$DEPLOY_SSH_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
+    - ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+  script:
+    - |
+      IMAGE_TAG="${CI_COMMIT_TAG:-$CI_COMMIT_SHA}"
+      ssh "$DEPLOY_USER@$DEPLOY_HOST" << EOF
+        set -e
+        cd $DEPLOY_PATH
+        cat > .env.prod << ENVEOF
+      BOT_TOKEN=$BOT_TOKEN
+      ADMIN_USER_IDS=$ADMIN_USER_IDS
+      POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+      BOT_INSTANCE_ID=${BOT_INSTANCE_ID:-default}
+      BOT_IMAGE=$CI_REGISTRY_IMAGE:$IMAGE_TAG
+      SYNC_SCHEDULER_ENABLED=${SYNC_SCHEDULER_ENABLED:-true}
+      RAG_QUERY_URL=$RAG_QUERY_URL
+      RAG_INGEST_URL=$RAG_INGEST_URL
+      RAG_QUERY_API_KEY=$RAG_QUERY_API_KEY
+      RAG_INGEST_API_KEY=$RAG_INGEST_API_KEY
+      RAG_FALLBACK_LOCAL=${RAG_FALLBACK_LOCAL:-true}
+      RUN_DB_SEED=false
+      ENVEOF
+        docker compose -f docker-compose.prod.yml --env-file .env.prod pull
+        docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+        docker compose -f docker-compose.prod.yml ps
+        docker compose -f docker-compose.prod.yml logs --tail=30 bot
+      EOF
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: on_success
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $DEPLOY_MANUAL == "true"
+      when: manual
+  environment:
+    name: production

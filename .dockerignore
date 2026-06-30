@@ -1,0 +1,16 @@
+node_modules
+dist
+.env
+.env.*
+!.env.example
+.git
+.github
+.gitlab-ci.yml
+*.log
+.DS_Store
+coverage
+.vitest
+docs
+PLAN.md
+PRODUCT-PLAN.md
+README.md

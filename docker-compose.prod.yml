@@ -1,0 +1,107 @@
+# Production stack: PostgreSQL + Telegram bot
+# Usage: docker compose -f docker-compose.prod.yml up -d
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-bot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-telegram_rag_bot}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-bot} -d ${POSTGRES_DB:-telegram_rag_bot}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bot_net
+
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${BOT_IMAGE:-telegram-rag-bot:latest}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      BOT_TOKEN: ${BOT_TOKEN:?Set BOT_TOKEN}
+      BOT_INSTANCE_ID: ${BOT_INSTANCE_ID:-default}
+      ADMIN_USER_IDS: ${ADMIN_USER_IDS:?Set ADMIN_USER_IDS}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-bot}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-telegram_rag_bot}?schema=public
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      RAG_HISTORY_LIMIT: ${RAG_HISTORY_LIMIT:-20}
+      SYNC_SCHEDULER_ENABLED: ${SYNC_SCHEDULER_ENABLED:-true}
+      RAG_INGEST_URL: ${RAG_INGEST_URL:-}
+      RAG_INGEST_API_KEY: ${RAG_INGEST_API_KEY:-}
+      RAG_QUERY_URL: ${RAG_QUERY_URL:-}
+      RAG_QUERY_API_KEY: ${RAG_QUERY_API_KEY:-}
+      RAG_QUERY_TOP_K: ${RAG_QUERY_TOP_K:-5}
+      RAG_FALLBACK_LOCAL: ${RAG_FALLBACK_LOCAL:-true}
+      SOURCE_INGEST_SCHEDULER_ENABLED: ${SOURCE_INGEST_SCHEDULER_ENABLED:-false}
+      SOURCE_MAX_CHUNK_CHARS: ${SOURCE_MAX_CHUNK_CHARS:-2000}
+      COMMUNITY_AUTO_INGEST_ON_APPROVE: ${COMMUNITY_AUTO_INGEST_ON_APPROVE:-true}
+      RUN_DB_SEED: ${RUN_DB_SEED:-false}
+    networks:
+      - bot_net
+
+  # Optional: periodic chat sync (recommended over in-process scheduler at scale)
+  sync-worker:
+    profiles: ["workers"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${BOT_IMAGE:-telegram-rag-bot:latest}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      bot:
+        condition: service_started
+    environment:
+      BOT_TOKEN: ${BOT_TOKEN}
+      BOT_INSTANCE_ID: ${BOT_INSTANCE_ID:-default}
+      ADMIN_USER_IDS: ${ADMIN_USER_IDS}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-bot}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-telegram_rag_bot}?schema=public
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    entrypoint: ["/sbin/tini", "--"]
+    command: ["sh", "-c", "while true; do node dist/src/jobs/run-chat-sync.js; sleep ${SYNC_INTERVAL_SECONDS:-21600}; done"]
+    networks:
+      - bot_net
+
+  source-ingest-worker:
+    profiles: ["workers"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${BOT_IMAGE:-telegram-rag-bot:latest}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      BOT_INSTANCE_ID: ${BOT_INSTANCE_ID:-default}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-bot}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-telegram_rag_bot}?schema=public
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      RAG_INGEST_URL: ${RAG_INGEST_URL:-}
+      RAG_INGEST_API_KEY: ${RAG_INGEST_API_KEY:-}
+      SOURCE_MAX_CHUNK_CHARS: ${SOURCE_MAX_CHUNK_CHARS:-2000}
+    entrypoint: ["/sbin/tini", "--"]
+    command: ["sh", "-c", "while true; do node dist/src/jobs/run-source-ingest.js; sleep ${INGEST_INTERVAL_SECONDS:-43200}; done"]
+    networks:
+      - bot_net
+
+volumes:
+  postgres_data:
+
+networks:
+  bot_net:
+    driver: bridge
