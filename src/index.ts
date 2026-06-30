@@ -1,9 +1,13 @@
 import { createBot } from "./bot/bot.js";
 import { env } from "./config/env.js";
 import { prisma } from "./db/prisma.js";
+import { startAdminApi } from "./api/server.js";
 
 async function main() {
-  const { bot, syncScheduler } = await createBot();
+  const { bot, syncScheduler, moderation } = await createBot();
+
+  const me = await bot.api.getMe();
+  const apiServer = startAdminApi(moderation, me.username);
 
   if (env.SYNC_SCHEDULER_ENABLED) {
     await syncScheduler.start();
@@ -12,6 +16,7 @@ async function main() {
   const shutdown = async (signal: string) => {
     console.info(`[shutdown] received ${signal}`);
     syncScheduler.stop();
+    apiServer?.close();
     await bot.stop();
     await prisma.$disconnect();
     process.exit(0);

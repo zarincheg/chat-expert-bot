@@ -50,6 +50,28 @@ services:
       SOURCE_MAX_CHUNK_CHARS: ${SOURCE_MAX_CHUNK_CHARS:-2000}
       COMMUNITY_AUTO_INGEST_ON_APPROVE: ${COMMUNITY_AUTO_INGEST_ON_APPROVE:-true}
       RUN_DB_SEED: ${RUN_DB_SEED:-false}
+      TRUST_SCORE_URL: ${TRUST_SCORE_URL:-}
+      TRUST_SCORE_API_KEY: ${TRUST_SCORE_API_KEY:-}
+      ADMIN_API_ENABLED: ${ADMIN_API_ENABLED:-true}
+      ADMIN_API_PORT: 3001
+      AUTH_SECRET: ${AUTH_SECRET:?Set AUTH_SECRET}
+      AUTH_URL: ${AUTH_URL:-http://localhost:3001}
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:5173}
+    ports:
+      - "${ADMIN_API_PORT:-3001}:3001"
+    networks:
+      - bot_net
+
+  web:
+    profiles: ["web"]
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - bot
+    ports:
+      - "${WEB_PORT:-5173}:80"
     networks:
       - bot_net
 

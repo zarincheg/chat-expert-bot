@@ -19,6 +19,8 @@
     "smoke-test": "tsx scripts/smoke-test.ts",
     "job:sync-chats": "tsx src/jobs/run-chat-sync.ts",
     "job:ingest-sources": "tsx src/jobs/run-source-ingest.ts",
+    "web:dev": "npm run dev --prefix web",
+    "web:build": "npm run build --prefix web",
     "db:studio": "prisma studio",
     "postinstall": "prisma generate"
   },
@@ -26,13 +28,19 @@
     "node": ">=20"
   },
   "dependencies": {
+    "@auth/core": "^0.41.2",
+    "@auth/express": "^0.12.2",
     "@grammyjs/conversations": "^2.0.3",
     "@prisma/client": "^6.9.0",
+    "cors": "^2.8.6",
     "dotenv": "^16.5.0",
+    "express": "^5.2.1",
     "grammy": "^1.36.0",
     "zod": "^3.25.67"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
     "@types/node": "^22.15.21",
     "prisma": "^6.9.0",
     "tsx": "^4.19.4",
