@@ -301,9 +301,11 @@ npm run dev
 
 ---
 
-## Product roadmap (Phases A–D)
+## Product roadmap
 
-Full implementation plan with schema, file-level tasks, PR stack, and estimates: **[PRODUCT-PLAN.md](./PRODUCT-PLAN.md)**
+### Phases A–D (complete)
+
+Full plan: **[PRODUCT-PLAN.md](./PRODUCT-PLAN.md)**
 
 | Phase | Focus |
 |-------|--------|
@@ -312,13 +314,25 @@ Full implementation plan with schema, file-level tasks, PR stack, and estimates:
 | C | Per-group settings + trigger policy |
 | D | Community answers, citations, promote to KB |
 
+### Phases E–J (planned — moderation + web)
+
+Full plan: **[MODERATION-PLAN.md](./MODERATION-PLAN.md)**  
+Decision log: **[DECISIONS.md](./DECISIONS.md)** — **awaiting confirmation**
+
+| Phase | Focus |
+|-------|--------|
+| E | Newcomer limits (content, grace period, restrict on join) |
+| F | Auto-ban rules + trust score API (mock) |
+| G | Blacklist/whitelist + moderation action log |
+| H | Rich per-group welcome (text, image, buttons) |
+| I | Admin REST API + basic stats |
+| J | Web dashboard SPA |
+
 ---
 
 ## Next Steps (suggested)
 
-1. Confirm [PRODUCT-PLAN.md](./PRODUCT-PLAN.md) decisions, then implement Phase A
-2. Implement real `AiClient` pointing to your RAG API
-2. Add pgvector column to `KnowledgeChunk` for semantic search
-3. Build ingestion worker for `DataSource` rows
-4. Add Prisma-backed session store for production
-5. Webhook mode + deploy (Railway, Fly.io, etc.)
+1. **Confirm** [DECISIONS.md](./DECISIONS.md) open questions (E-1–E-21)
+2. **Implement** Phase E per [MODERATION-PLAN.md](./MODERATION-PLAN.md)
+3. Connect real `RAG_QUERY_URL` / `AiClient` when ready
+4. Webhook mode for multi-instance scale (Phase K)

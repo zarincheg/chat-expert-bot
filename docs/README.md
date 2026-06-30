@@ -21,6 +21,13 @@ Production-ready guides for deploying and operating the Telegram RAG community b
 | [Operations](operations.md) | Jobs, backups, monitoring, upgrades |
 | [Production Checklist](deployment/production-checklist.md) | Pre-launch checklist |
 
+## Roadmap (planned)
+
+| Document | Description |
+|----------|-------------|
+| [MODERATION-PLAN.md](../MODERATION-PLAN.md) | Phases E–J: newcomer limits, auto-ban, web admin |
+| [DECISIONS.md](../DECISIONS.md) | Confirmed + open product decisions |
+
 ## For developers
 
 | Document | Description |
