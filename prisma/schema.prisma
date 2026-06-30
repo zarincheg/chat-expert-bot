@@ -26,8 +26,13 @@ model BotInstance {
   ingestionRuns    IngestionRun[]
   managedGroups    ManagedGroup[]
   sourceIngestRuns SourceIngestionRun[]
-  communityAnswers CommunityAnswer[]
-  questionLogs     QuestionLog[]
+  communityAnswers    CommunityAnswer[]
+  questionLogs        QuestionLog[]
+  groupMembers        GroupMember[]
+  accessListEntries   AccessListEntry[]
+  moderationActionLogs ModerationActionLog[]
+  welcomeConfigs      WelcomeConfig[]
+  moderationRules     ModerationRule[]
 }
 
 model ManagedGroup {
@@ -247,4 +252,119 @@ model QuestionLog {
 
   @@index([botInstanceId, chatId, createdAt])
   @@index([botInstanceId, normalized])
+}
+
+enum GroupMemberStatus {
+  ACTIVE
+  RESTRICTED
+  BANNED
+  LEFT
+}
+
+model GroupMember {
+  id             String            @id @default(cuid())
+  botInstanceId  String
+  botInstance    BotInstance       @relation(fields: [botInstanceId], references: [id], onDelete: Cascade)
+  chatId         BigInt
+  userId         BigInt
+  username       String?
+  firstName      String?
+  lastName       String?
+  joinedAt       DateTime          @default(now())
+  firstMessageAt DateTime?
+  status         GroupMemberStatus @default(ACTIVE)
+  messageCount   Int               @default(0)
+  leftAt         DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@unique([botInstanceId, chatId, userId])
+  @@index([botInstanceId, chatId, status])
+  @@index([botInstanceId, chatId, joinedAt])
+}
+
+enum AccessListType {
+  BLACKLIST
+  WHITELIST
+}
+
+model AccessListEntry {
+  id            String         @id @default(cuid())
+  botInstanceId String
+  botInstance   BotInstance    @relation(fields: [botInstanceId], references: [id], onDelete: Cascade)
+  chatId        BigInt?
+  userId        BigInt
+  listType      AccessListType
+  reason        String?
+  createdById   BigInt?
+  createdAt     DateTime       @default(now())
+
+  @@unique([botInstanceId, chatId, userId, listType])
+  @@index([botInstanceId, userId])
+  @@index([botInstanceId, listType])
+}
+
+enum ModerationActionType {
+  RESTRICT
+  UNRESTRICT
+  BAN
+  UNBAN
+  DELETE_MESSAGE
+  WELCOME_SENT
+  RULE_MATCH
+  NEWCOMER_BLOCK
+  TRUST_SCORE
+}
+
+model ModerationActionLog {
+  id            String               @id @default(cuid())
+  botInstanceId String
+  botInstance   BotInstance          @relation(fields: [botInstanceId], references: [id], onDelete: Cascade)
+  chatId        BigInt
+  targetUserId  BigInt?
+  actionType    ModerationActionType
+  ruleId        String?
+  trustScore    Float?
+  details       Json?
+  success       Boolean              @default(true)
+  errorMessage  String?
+  createdAt     DateTime             @default(now())
+
+  @@index([botInstanceId, chatId, createdAt])
+  @@index([botInstanceId, actionType, createdAt])
+  @@index([botInstanceId, targetUserId])
+}
+
+model WelcomeConfig {
+  id                String      @id @default(cuid())
+  botInstanceId     String
+  botInstance       BotInstance @relation(fields: [botInstanceId], references: [id], onDelete: Cascade)
+  chatId            BigInt
+  enabled           Boolean     @default(true)
+  text              String
+  photoFileId       String?
+  photoUrl          String?
+  buttons           Json        @default("[]")
+  deleteJoinMessage Boolean     @default(true)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@unique([botInstanceId, chatId])
+}
+
+model ModerationRule {
+  id            String      @id @default(cuid())
+  botInstanceId String
+  botInstance   BotInstance @relation(fields: [botInstanceId], references: [id], onDelete: Cascade)
+  chatId        BigInt?
+  name          String
+  ruleType      String
+  pattern       String
+  action        String
+  enabled       Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([botInstanceId, chatId, enabled])
+  @@index([botInstanceId, ruleType])
 }
