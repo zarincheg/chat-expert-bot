@@ -40,6 +40,19 @@ const envSchema = z.object({
     .string()
     .default("true")
     .transform((v) => v === "true" || v === "1"),
+  TRUST_SCORE_URL: z.string().optional(),
+  TRUST_SCORE_API_KEY: z.string().optional(),
+  ADMIN_API_ENABLED: z
+    .string()
+    .default("true")
+    .transform((v) => v === "true" || v === "1"),
+  ADMIN_API_PORT: z.coerce.number().int().positive().default(3001),
+  AUTH_SECRET: z
+    .string()
+    .min(32)
+    .default("development-auth-secret-min-32-chars!!"),
+  AUTH_URL: z.string().url().optional(),
+  WEB_ORIGIN: z.string().default("http://localhost:5173"),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -24,13 +24,33 @@ import { registerCommandHandlers } from "./handlers/commands.js";
 import { registerCallbackHandlers } from "./handlers/callbacks.js";
 import { registerMessageHandlers } from "./handlers/messages.js";
 import { registerChatMemberHandlers } from "./handlers/chat-member.js";
+import { registerModerationHandlers } from "./handlers/moderation.js";
+import { ModerationConfigService } from "../services/moderation/moderation-config.service.js";
+import { GroupMemberService } from "../services/moderation/group-member.service.js";
+import { AccessListService } from "../services/moderation/access-list.service.js";
+import { ModerationLogService } from "../services/moderation/moderation-log.service.js";
+import { ModerationRuleService } from "../services/moderation/rule.service.js";
+import { WelcomeService } from "../services/moderation/welcome.service.js";
+import { ModerationEngine } from "../services/moderation/moderation-engine.service.js";
+import { NewcomerPolicyService } from "../services/moderation/newcomer-policy.service.js";
 import { reportIssueConversation } from "./conversations/report-issue.conversation.js";
 import { createAskAiConversation } from "./conversations/ask-ai.conversation.js";
 import { createAdminConversation } from "../admin/admin-conversation.js";
 
+export interface ModerationServices {
+  moderationConfig: ModerationConfigService;
+  memberService: GroupMemberService;
+  accessListService: AccessListService;
+  moderationLog: ModerationLogService;
+  ruleService: ModerationRuleService;
+  welcomeService: WelcomeService;
+  botInstanceId: string;
+}
+
 export interface BotRuntime {
   bot: Bot<BotContext>;
   syncScheduler: SyncScheduler;
+  moderation: ModerationServices;
 }
 
 export async function createBot(): Promise<BotRuntime> {
@@ -73,6 +93,22 @@ export async function createBot(): Promise<BotRuntime> {
   const syncScheduler = new SyncScheduler(syncService, configService);
   const triggerPolicy = new TriggerPolicyService();
   const rateLimiter = new ChatRateLimiter();
+  const moderationConfig = new ModerationConfigService(instance.id);
+  const memberService = new GroupMemberService(instance.id);
+  const accessListService = new AccessListService(instance.id);
+  const moderationLog = new ModerationLogService(instance.id);
+  const ruleService = new ModerationRuleService(instance.id);
+  const welcomeService = new WelcomeService(instance.id, moderationLog);
+  const moderationEngine = new ModerationEngine(
+    instance.id,
+    moderationConfig,
+    memberService,
+    accessListService,
+    moderationLog,
+    ruleService,
+    welcomeService,
+  );
+  const newcomerPolicy = new NewcomerPolicyService();
 
   const settings = await configService.getSettings();
   captureService.configureFromSettings(settings.chatIngestion);
@@ -98,6 +134,7 @@ export async function createBot(): Promise<BotRuntime> {
   );
 
   registerChatMemberHandlers(bot, groupRegistry);
+  registerModerationHandlers(bot, moderationEngine, newcomerPolicy, groupRegistry);
   registerCommandHandlers(bot, configService, ragService, groupConfigService, communityService);
   registerCallbackHandlers(bot, configService, ragService);
   registerMessageHandlers(
@@ -113,5 +150,17 @@ export async function createBot(): Promise<BotRuntime> {
 
   bot.catch(errorHandler);
 
-  return { bot, syncScheduler };
+  return {
+    bot,
+    syncScheduler,
+    moderation: {
+      moderationConfig,
+      memberService,
+      accessListService,
+      moderationLog,
+      ruleService,
+      welcomeService,
+      botInstanceId: instance.id,
+    },
+  };
 }
